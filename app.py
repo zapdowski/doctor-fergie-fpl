@@ -240,54 +240,9 @@ hr {{
     margin-top: 0.15rem;
 }}
 
-/* A hand-built stat card matching stMetric's look, for cases (like an
-   active-chip indicator) that need a state st.metric can't express —
-   here, a highlighted variant for "something is actively happening". */
-.pl-stat-row {{
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 0.5rem;
-    flex-wrap: wrap;
-}}
-
-.pl-stat-card {{
-    position: relative;
-    flex: 1;
-    min-width: 160px;
-    background: linear-gradient(160deg, {PL_SURFACE_HI} 0%, {PL_SURFACE} 65%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
-    padding: 0.95rem 1.1rem;
-}}
-
-.pl-stat-card::before {{
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    border-radius: 14px 14px 0 0;
-    background: linear-gradient(90deg, {PL_PINK}, {PL_PURPLE});
-}}
-
-.pl-stat-label {{
-    font-family: 'Inter', sans-serif;
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    opacity: 0.7;
-    margin-bottom: 0.3rem;
-}}
-
-.pl-stat-value {{
-    font-family: 'Inter', sans-serif;
-    color: white;
-    font-weight: 800;
-    font-size: 1.7rem;
-    line-height: 1.2;
-}}
-
+/* The "★ Recommended" pill on a Chip Strategy card (see render_chip_card) —
+   the only remaining user of this hand-built-stat-card family now that every
+   headline number lives in a plain st.metric. */
 .pl-stat-badge {{
     display: inline-block;
     margin-top: 0.4rem;
@@ -300,24 +255,6 @@ hr {{
     background: rgba(255, 40, 130, 0.15);
     padding: 0.15rem 0.55rem;
     border-radius: 999px;
-}}
-
-/* A native-tooltip "?" affordance for the hand-built stat cards, echoing
-   st.metric's own help-icon treatment elsewhere on the page. */
-.pl-stat-help {{
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
-    margin-left: 0.35rem;
-    border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    font-size: 0.65rem;
-    font-weight: 700;
-    opacity: 0.6;
-    cursor: help;
-    vertical-align: middle;
 }}
 
 /* Chip Strategy cards — the same card language as the stat row above
@@ -1063,7 +1000,9 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
 
     st.subheader(f"{entry.get('name', 'My team')} — {entry.get('player_first_name', '')} {entry.get('player_last_name', '')}")
 
-    m1, m2, m3, m4, m5 = st.columns(5, vertical_alignment="center")
+    free_transfers = team.estimate_free_transfers(history)
+
+    m1, m2, m3 = st.columns(3, vertical_alignment="center")
     m1.metric(
         "Overall points",
         entry.get("summary_overall_points"),
@@ -1083,6 +1022,7 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
         delta=deltas["points_delta"] if deltas else None,
         help="How many more or fewer points you scored compared to the previous gameweek.",
     )
+    m4, m5, m6 = st.columns(3, vertical_alignment="center")
     m4.metric(
         "Bank",
         f"£{gw_info.get('bank', 0) / 10:.1f}m",
@@ -1097,36 +1037,15 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
         delta=_signed_gbp(deltas["value_delta"]) if deltas else None,
         help="How much your squad's total value has grown or shrunk since the previous gameweek.",
     )
-
-    free_transfers = team.estimate_free_transfers(history)
-    # st.markdown treats 4+ leading spaces as a Markdown code block, so this
-    # has to be built with no line-leading indentation or it renders as a
-    # broken mix of raw HTML and literal code-block text.
-    free_transfers_help = (
-        "FPL does not expose free transfers remaining directly, so this is "
+    m6.metric(
+        "Free transfers",
+        free_transfers,
+        help="FPL does not expose free transfers remaining directly, so this is "
         "a best-effort estimate from your transfer history, not guaranteed "
-        "accurate."
+        "accurate.",
     )
-    stat_row_html = (
-        '<div class="pl-stat-row">'
-        '<div class="pl-stat-card">'
-        '<div class="pl-stat-label">Free transfers'
-        f'<span class="pl-stat-help" title="{free_transfers_help}">?</span>'
-        "</div>"
-        f'<div class="pl-stat-value">{free_transfers}</div>'
-        "</div>"
-        "</div>"
-    )
-    st.markdown(stat_row_html, unsafe_allow_html=True)
 
     chips_used = history.get("chips", [])
-    if chips_used:
-        st.caption(
-            "Chips used: "
-            + ", ".join(f"{chip_display_name(c['name'])} (GW{c['event']})" for c in chips_used)
-        )
-    else:
-        st.caption("No chips used yet this season.")
 
     st.markdown("#### Squad")
     squad_df = team.build_squad_df(picks, players, live=live)
