@@ -271,17 +271,6 @@ hr {{
     background: linear-gradient(90deg, {PL_PINK}, {PL_PURPLE});
 }}
 
-.pl-stat-card--active {{
-    background: linear-gradient(160deg, rgba(255, 40, 130, 0.3) 0%, {PL_SURFACE} 75%);
-    border-color: rgba(255, 40, 130, 0.55);
-    box-shadow: 0 0 0 1px rgba(255, 40, 130, 0.2), 0 8px 22px rgba(255, 40, 130, 0.18);
-}}
-
-.pl-stat-card--active::before {{
-    background: {PL_PINK};
-    box-shadow: 0 0 12px rgba(255, 40, 130, 0.7);
-}}
-
 .pl-stat-label {{
     font-family: 'Inter', sans-serif;
     font-size: 0.75rem;
@@ -698,6 +687,14 @@ def render_chip_card(title, body, state="save"):
     st.markdown(html, unsafe_allow_html=True)
 
 
+def _chip_last_played_note(played_gw):
+    """A short trailing sentence noting when a chip was last played this
+    season, for appending to a Chip Strategy card body — "" if it hasn't
+    been played at all.
+    """
+    return f" Last played GW{played_gw}." if played_gw else ""
+
+
 def render_last_updated(label, fetched_at, is_stale_fallback, error):
     fetched_at_local = fetched_at.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
     if is_stale_fallback:
@@ -1084,10 +1081,6 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
     )
 
     free_transfers = team.estimate_free_transfers(history)
-    active_chip = picks.get("active_chip")
-    active_chip_label = f"Used ({chip_display_name(active_chip)})" if active_chip else "Not Used"
-    active_card_class = "pl-stat-card pl-stat-card--active" if active_chip else "pl-stat-card"
-    active_badge = '<div class="pl-stat-badge">● Active</div>' if active_chip else ""
     # st.markdown treats 4+ leading spaces as a Markdown code block, so this
     # has to be built with no line-leading indentation or it renders as a
     # broken mix of raw HTML and literal code-block text.
@@ -1103,11 +1096,6 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
         f'<span class="pl-stat-help" title="{free_transfers_help}">?</span>'
         "</div>"
         f'<div class="pl-stat-value">{free_transfers}</div>'
-        "</div>"
-        f'<div class="{active_card_class}">'
-        '<div class="pl-stat-label">Active chip this GW</div>'
-        f'<div class="pl-stat-value">{active_chip_label}</div>'
-        f"{active_badge}"
         "</div>"
         "</div>"
     )
@@ -1491,6 +1479,11 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
         "proxy, not a real forecast, and especially noisy this early in the season."
     )
     available_chips = chips.available_chips(bootstrap, chips_used, next_gw)
+    # FPL grants two of each chip (one per half-season) -- if a chip name shows up
+    # more than once, chips_used is chronological, so the last entry is the most
+    # recent play. Surfaced both when a chip is currently unavailable because of
+    # it, and as a "last played" footnote when it's already available again.
+    chip_last_played_gw = {c["name"]: c["event"] for c in chips_used}
     if fixtures_data is None:
         st.info("Fixtures unavailable this session — can't compute chip suggestions.")
     else:
@@ -1513,39 +1506,53 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
 
             with cols[0]:
                 bb = None
+                bboost_played_gw = chip_last_played_gw.get("bboost")
                 if chip_xi is not None:
                     starting_ids, bench_ids, _ = chip_xi
                     ideal_starters = chip_ranked_next[chip_ranked_next["id"].isin(starting_ids)]
                     ideal_bench = chip_ranked_next[chip_ranked_next["id"].isin(bench_ids)]
                     bb = chips.suggest_bench_boost(ideal_starters, ideal_bench)
                 if not available_chips.get("bboost"):
-                    render_chip_card("Bench Boost", "Already used / not available this window.", "muted")
+                    muted_msg = (
+                        f"Already used in GW{bboost_played_gw}."
+                        if bboost_played_gw
+                        else "Not available this window."
+                    )
+                    render_chip_card("Bench Boost", muted_msg, "muted")
                 elif bb is None:
                     render_chip_card("Bench Boost", "Not enough data.", "muted")
                 elif bb["recommend"]:
                     render_chip_card(
                         "Bench Boost",
                         f"Good week — bench projects {bb['bench_total']:.1f} pts "
-                        f"(avg {bb['bench_avg']:.1f} vs starters' {bb['starter_avg']:.1f}).",
+                        f"(avg {bb['bench_avg']:.1f} vs starters' {bb['starter_avg']:.1f})."
+                        f"{_chip_last_played_note(bboost_played_gw)}",
                         "recommend",
                     )
                 else:
                     render_chip_card(
                         "Bench Boost",
                         f"Save it — bench projects only {bb['bench_total']:.1f} pts "
-                        f"(avg {bb['bench_avg']:.1f} vs starters' {bb['starter_avg']:.1f}).",
+                        f"(avg {bb['bench_avg']:.1f} vs starters' {bb['starter_avg']:.1f})."
+                        f"{_chip_last_played_note(bboost_played_gw)}",
                         "save",
                     )
 
             with cols[1]:
                 tc = None
+                triple_captain_played_gw = chip_last_played_gw.get("3xc")
                 if chip_xi is not None:
                     starting_ids, _, _ = chip_xi
                     ideal_starters = chip_ranked_next[chip_ranked_next["id"].isin(starting_ids)]
                     cap, _ = opt.pick_captain_vice(ideal_starters, score_col="expected_score")
                     tc = chips.suggest_triple_captain(cap)
                 if not available_chips.get("3xc"):
-                    render_chip_card("Triple Captain", "Already used / not available this window.", "muted")
+                    muted_msg = (
+                        f"Already used in GW{triple_captain_played_gw}."
+                        if triple_captain_played_gw
+                        else "Not available this window."
+                    )
+                    render_chip_card("Triple Captain", muted_msg, "muted")
                 elif tc is None:
                     render_chip_card("Triple Captain", "Not enough data.", "muted")
                 elif tc["recommend"]:
@@ -1553,14 +1560,16 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                     render_chip_card(
                         "Triple Captain",
                         f"Good week — {tc['captain_name']} projects {tc['captain_score']:.1f} "
-                        f"pts ({reason}).",
+                        f"pts ({reason})."
+                        f"{_chip_last_played_note(triple_captain_played_gw)}",
                         "recommend",
                     )
                 else:
                     render_chip_card(
                         "Triple Captain",
                         f"Save it — best captain ({tc['captain_name']}) only projects "
-                        f"{tc['captain_score']:.1f} pts.",
+                        f"{tc['captain_score']:.1f} pts."
+                        f"{_chip_last_played_note(triple_captain_played_gw)}",
                         "save",
                     )
 
@@ -1571,48 +1580,65 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
             )
 
             with cols[2]:
+                freehit_played_gw = chip_last_played_gw.get("freehit")
                 if not available_chips.get("freehit"):
-                    render_chip_card("Free Hit", "Already used / not available this window.", "muted")
+                    muted_msg = (
+                        f"Already used in GW{freehit_played_gw}."
+                        if freehit_played_gw
+                        else "Not available this window."
+                    )
+                    render_chip_card("Free Hit", muted_msg, "muted")
                 elif reset["recommend_freehit"]:
                     render_chip_card(
                         "Free Hit",
                         f"Consider it — an optimal squad projects {reset['gap_next_gw'] * 100:.0f}% "
                         f"higher ({reset['optimal_next_gw']:.1f} vs {reset['current_next_gw']:.1f} pts) "
-                        "just for this gameweek, and that gap doesn't persist over the coming weeks.",
+                        "just for this gameweek, and that gap doesn't persist over the coming weeks."
+                        f"{_chip_last_played_note(freehit_played_gw)}",
                         "recommend",
                     )
                 elif reset["gap_next_gw"] >= chips.FREEHIT_GAP_THRESHOLD:
                     render_chip_card(
                         "Free Hit",
                         "Save it — this gameweek's gap is real, but it doesn't go away next week "
-                        "either, so Wildcard fixes it better than a one-week Free Hit.",
+                        "either, so Wildcard fixes it better than a one-week Free Hit."
+                        f"{_chip_last_played_note(freehit_played_gw)}",
                         "save",
                     )
                 else:
                     render_chip_card(
                         "Free Hit",
                         f"Save it — only a {reset['gap_next_gw'] * 100:.0f}% gap to an optimal squad "
-                        "this gameweek.",
+                        "this gameweek."
+                        f"{_chip_last_played_note(freehit_played_gw)}",
                         "save",
                     )
 
             with cols[3]:
+                wildcard_played_gw = chip_last_played_gw.get("wildcard")
                 if not available_chips.get("wildcard"):
-                    render_chip_card("Wildcard", "Already used / not available this window.", "muted")
+                    muted_msg = (
+                        f"Already used in GW{wildcard_played_gw}."
+                        if wildcard_played_gw
+                        else "Not available this window."
+                    )
+                    render_chip_card("Wildcard", muted_msg, "muted")
                 elif reset["recommend_wildcard"]:
                     render_chip_card(
                         "Wildcard",
                         f"Consider it — your squad projects {reset['gap_lookahead'] * 100:.0f}% below "
                         f"an optimal one ({reset['optimal_lookahead']:.1f} vs "
                         f"{reset['current_lookahead']:.1f} pts) over the next {reset['lookahead_gws']} "
-                        "gameweeks, not just a one-off.",
+                        "gameweeks, not just a one-off."
+                        f"{_chip_last_played_note(wildcard_played_gw)}",
                         "recommend",
                     )
                 else:
                     render_chip_card(
                         "Wildcard",
                         f"Save it — only a {reset['gap_lookahead'] * 100:.0f}% gap to an optimal squad "
-                        f"over the next {reset['lookahead_gws']} gameweeks.",
+                        f"over the next {reset['lookahead_gws']} gameweeks."
+                        f"{_chip_last_played_note(wildcard_played_gw)}",
                         "save",
                     )
     st.markdown("#### Season History")
