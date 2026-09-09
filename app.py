@@ -568,9 +568,17 @@ def load_prior_season_stats(player_ids, force_refresh=False):
 
 def build_player_table(bootstrap):
     elements = pd.DataFrame(bootstrap["elements"])
-    teams = pd.DataFrame(bootstrap["teams"])[["id", "name", "short_name"]].rename(
-        columns={"id": "team", "name": "team_name", "short_name": "team_short"}
-    )
+    teams = pd.DataFrame(bootstrap["teams"])[
+        [
+            "id",
+            "name",
+            "short_name",
+            "strength_attack_home",
+            "strength_attack_away",
+            "strength_defence_home",
+            "strength_defence_away",
+        ]
+    ].rename(columns={"id": "team", "name": "team_name", "short_name": "team_short"})
     positions = pd.DataFrame(bootstrap["element_types"])[["id", "singular_name_short"]].rename(
         columns={"id": "element_type", "singular_name_short": "position"}
     )
@@ -629,6 +637,10 @@ def build_player_table(bootstrap):
             "threat",
             "creativity",
             "defensive_contribution",
+            "strength_attack_home",
+            "strength_attack_away",
+            "strength_defence_home",
+            "strength_defence_away",
         ]
     ]
 

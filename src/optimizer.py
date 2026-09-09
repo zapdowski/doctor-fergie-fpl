@@ -222,8 +222,7 @@ def apply_fixture_adjustment(scored_df, fixtures, start_gw, num_gws, fixture_wei
     if fixture_weight <= 0 or not fixtures:
         return scored_df
     df = scored_df.copy()
-    team_ids = df["team"].unique().tolist()
-    strengths, home_advantage, league_avg_attack = forecast.fit_team_strengths(fixtures, team_ids)
+    strengths, home_advantage, league_avg_attack = forecast.fit_team_strengths_from_players(fixtures, df)
 
     if strengths is None:
         raw_multiplier = df["team"].map(team_fixture_multipliers(fixtures, start_gw, num_gws)).fillna(1.0)

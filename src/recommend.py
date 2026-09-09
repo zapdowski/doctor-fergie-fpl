@@ -41,8 +41,7 @@ def recommend_captain(current_ids, players_df, fixtures, gw, form_weight=0.7, pp
     scored = opt.compute_score(players_df, form_weight=form_weight, ppg_weight=ppg_weight)
     scored = scored[scored["id"].isin(current_ids)].copy()
 
-    team_ids = players_df["team"].unique().tolist()
-    strengths, home_advantage, league_avg_attack = forecast.fit_team_strengths(fixtures, team_ids)
+    strengths, home_advantage, league_avg_attack = forecast.fit_team_strengths_from_players(fixtures, players_df)
 
     fixture_map = _team_fixtures_for_gw(fixtures, gw)
 

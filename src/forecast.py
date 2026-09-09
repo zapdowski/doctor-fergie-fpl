@@ -28,9 +28,21 @@ From expected goals, two real (if simplified) forecasts fall out:
     the FDR lookup table for GKP/DEF scoring.
 
 Every caller must be ready for fit_team_strengths to return (None, None,
-None): with too few finished matches (very early preseason), there's
-nothing meaningful to fit, and callers should fall back to the FDR-based
-proxy instead.
+None): with too few finished matches and no usable prior (see below),
+there's nothing meaningful to fit, and callers should fall back to the
+FDR-based proxy instead.
+
+When this season's own results are thin, fit_team_strengths can also lean
+on a prior — FPL's own strength_attack_home/away and
+strength_defence_home/away ratings (bootstrap-static's per-team fields,
+an Elo-like scale FPL sets partly from past performance), converted to a
+relative attack/defence multiplier via team_priors_from_strength_ratings.
+Early on, a team's fitted strength is shrunk toward this prior instead of
+a flat league average; as more of the current season accumulates, the
+prior's influence fades out in favour of what's actually happened this
+season. When FPL hasn't populated those fields for this account (they
+come back all zero), there's no usable signal there and everything falls
+back to the flat-average behaviour as before.
 """
 
 import math
@@ -53,6 +65,12 @@ CONVERGENCE_TOL = 1e-6
 # Typical historical top-flight home advantage; used as the starting value
 # for fitting, and as the fallback if there's ever nothing to fit against.
 DEFAULT_HOME_ADVANTAGE = 1.35
+# Used only to convert a strength_attack_* prior (a relative, dimensionless
+# ratio) into an absolute expected-goals scale before ANY current-season
+# match has been played to anchor to — a modern top-flight average. Once
+# even a handful of matches exist, league_avg_attack is fit from real data
+# instead and this constant no longer matters.
+FALLBACK_LEAGUE_AVG_GOALS = 1.4
 
 
 def _finished_matches(fixtures_data):
@@ -63,7 +81,59 @@ def _finished_matches(fixtures_data):
     ]
 
 
-def fit_team_strengths(fixtures_data, team_ids):
+def team_priors_from_strength_ratings(team_ratings):
+    """Convert FPL's own team strength ratings into a relative attack/
+    defence prior usable alongside this season's fitted values.
+
+    team_ratings: {team_id: {"strength_attack_home": int,
+    "strength_attack_away": int, "strength_defence_home": int,
+    "strength_defence_away": int}} (bootstrap-static's per-team fields).
+
+    Returns {team_id: {"attack": relative_multiplier, "defence":
+    relative_multiplier}} (1.0 = league average in each), or None if
+    these ratings aren't populated for this account (FPL sometimes leaves
+    them at 0) — a prior built from all-zero inputs is worse than no
+    prior at all.
+    """
+    attack_raw = {tid: (r["strength_attack_home"] + r["strength_attack_away"]) / 2 for tid, r in team_ratings.items()}
+    defence_raw = {
+        tid: (r["strength_defence_home"] + r["strength_defence_away"]) / 2 for tid, r in team_ratings.items()
+    }
+    if not all(attack_raw.values()) or not all(defence_raw.values()):
+        return None
+
+    attack_avg = sum(attack_raw.values()) / len(attack_raw)
+    defence_avg = sum(defence_raw.values()) / len(defence_raw)
+
+    return {
+        tid: {
+            "attack": attack_raw[tid] / attack_avg,
+            # FPL's defence rating runs the opposite way from this model's
+            # `defence` parameter: higher FPL rating = stronger (harder to
+            # score on) defence, but higher `defence` here = leakier.
+            # Inverting the ratio points the prior the right direction.
+            "defence": defence_avg / defence_raw[tid],
+        }
+        for tid in team_ratings
+    }
+
+
+def fit_team_strengths_from_players(fixtures_data, players_df):
+    """Convenience wrapper for callers that only have a player-level
+    dataframe (with a "team" column, plus optionally the FPL strength_*
+    columns) rather than a bare list of team ids and a prior already
+    built — derives both from players_df.
+    """
+    team_ids = players_df["team"].unique().tolist()
+    strength_cols = ["strength_attack_home", "strength_attack_away", "strength_defence_home", "strength_defence_away"]
+    prior_strengths = None
+    if all(c in players_df.columns for c in strength_cols):
+        team_ratings = players_df.groupby("team")[strength_cols].first().to_dict("index")
+        prior_strengths = team_priors_from_strength_ratings(team_ratings)
+    return fit_team_strengths(fixtures_data, team_ids, prior_strengths=prior_strengths)
+
+
+def fit_team_strengths(fixtures_data, team_ids, prior_strengths=None):
     """Fit attack/defence strength for each team in team_ids from this
     season's finished matches.
 
@@ -71,19 +141,27 @@ def fit_team_strengths(fixtures_data, team_ids):
     strengths is {team_id: {"attack": float, "defence": float,
     "matches_played": int}}. Returns (None, None, None) if there aren't
     enough finished matches league-wide to fit anything meaningful (see
-    MIN_FINISHED_MATCHES).
+    MIN_FINISHED_MATCHES) and there's no usable prior to fall back on.
 
-    Each team's raw fitted strength is shrunk toward the league average in
-    proportion to how few matches they've played (see SHRINKAGE_MATCHES) —
-    with only a handful of games played, a fitted strength is barely more
-    reliable than the average.
+    prior_strengths, if given (see team_priors_from_strength_ratings), is
+    used two ways: as the iteration's starting point (so a team with zero
+    matches so far just keeps its prior-implied strength, rather than a
+    neutral 1.0), and as what each team's fitted strength is shrunk toward
+    instead of the flat league average, in proportion to how few matches
+    they've played (see SHRINKAGE_MATCHES) — with only a handful of games
+    played, a fitted strength is barely more reliable than the prior.
     """
     matches = _finished_matches(fixtures_data)
-    if len(matches) < MIN_FINISHED_MATCHES:
+    has_prior = prior_strengths is not None and all(tid in prior_strengths for tid in team_ids)
+    if len(matches) < MIN_FINISHED_MATCHES and not has_prior:
         return None, None, None
 
-    attack = {tid: 1.0 for tid in team_ids}
-    defence = {tid: 1.0 for tid in team_ids}
+    if has_prior:
+        attack = {tid: prior_strengths[tid]["attack"] * FALLBACK_LEAGUE_AVG_GOALS for tid in team_ids}
+        defence = {tid: prior_strengths[tid]["defence"] for tid in team_ids}
+    else:
+        attack = {tid: 1.0 for tid in team_ids}
+        defence = {tid: 1.0 for tid in team_ids}
     home_advantage = DEFAULT_HOME_ADVANTAGE
 
     # (opponent_id, goals_for, goals_against) per team, split by venue —
@@ -139,9 +217,15 @@ def fit_team_strengths(fixtures_data, team_ids):
     for tid in team_ids:
         n = matches_played[tid]
         confidence = n / (n + SHRINKAGE_MATCHES)
+        if has_prior:
+            shrink_toward_attack = prior_strengths[tid]["attack"] * league_avg_attack
+            shrink_toward_defence = prior_strengths[tid]["defence"]
+        else:
+            shrink_toward_attack = league_avg_attack
+            shrink_toward_defence = 1.0
         strengths[tid] = {
-            "attack": confidence * attack[tid] + (1 - confidence) * league_avg_attack,
-            "defence": confidence * defence[tid] + (1 - confidence) * 1.0,
+            "attack": confidence * attack[tid] + (1 - confidence) * shrink_toward_attack,
+            "defence": confidence * defence[tid] + (1 - confidence) * shrink_toward_defence,
             "matches_played": n,
         }
     return strengths, home_advantage, league_avg_attack
