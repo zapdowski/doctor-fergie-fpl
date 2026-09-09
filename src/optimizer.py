@@ -10,6 +10,7 @@ per the project brief.
 
 import pulp
 
+from . import forecast
 from .fixtures import team_fixture_multipliers
 
 POSITIONS = ["GKP", "DEF", "MID", "FWD"]
@@ -202,8 +203,16 @@ def apply_last_season_adjustment(scored_df, prior_stats, weight=0.3):
 
 def apply_fixture_adjustment(scored_df, fixtures, start_gw, num_gws, fixture_weight=0.5):
     """Blend each player's score with how favourable their team's next
-    num_gws fixtures are (see fixtures.team_fixture_multipliers) — a good
-    run of fixtures boosts the score, a bad run or blanks reduce it.
+    num_gws fixtures are — a good run of fixtures boosts the score, a bad
+    run or blanks reduce it.
+
+    Uses forecast.py's expected-goals model (fit from this season's actual
+    results) when there's enough data: MID/FWD scale with expected goals
+    for, GKP/DEF scale with expected clean-sheet probability, both via
+    forecast.team_window_multipliers. Falls back to FPL's own 1-5 Fixture
+    Difficulty Rating (fixtures.team_fixture_multipliers, applied the same
+    way to every position) when there isn't enough finished-match data yet
+    to fit the model.
 
     fixture_weight=0 leaves scores unchanged (the old, fixture-blind
     behavior); fixture_weight=1 applies the full fixture multiplier.
@@ -213,8 +222,21 @@ def apply_fixture_adjustment(scored_df, fixtures, start_gw, num_gws, fixture_wei
     if fixture_weight <= 0 or not fixtures:
         return scored_df
     df = scored_df.copy()
-    multipliers = team_fixture_multipliers(fixtures, start_gw, num_gws)
-    raw_multiplier = df["team"].map(multipliers).fillna(1.0)
+    team_ids = df["team"].unique().tolist()
+    strengths, home_advantage, league_avg_attack = forecast.fit_team_strengths(fixtures, team_ids)
+
+    if strengths is None:
+        raw_multiplier = df["team"].map(team_fixture_multipliers(fixtures, start_gw, num_gws)).fillna(1.0)
+    else:
+        window = forecast.team_window_multipliers(
+            fixtures, start_gw, num_gws, strengths, home_advantage, league_avg_attack
+        )
+        is_defensive = df["position"].isin(forecast.DEFENSIVE_POSITIONS)
+        raw_multiplier = df["team"].map(lambda t: window.get(t, {}).get("attack", 1.0))
+        raw_multiplier = raw_multiplier.where(
+            ~is_defensive, df["team"].map(lambda t: window.get(t, {}).get("defence", 1.0))
+        )
+
     effective_multiplier = 1 + fixture_weight * (raw_multiplier - 1)
     df["score"] = df["score"] * effective_multiplier
     return df

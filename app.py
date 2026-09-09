@@ -1407,9 +1407,10 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
     st.markdown("#### Chip Strategy")
     st.caption(
         "Personalized suggestions from your actual squad, current form, and fixtures — not "
-        "just blank/double gameweek detection. Same 'simple proxy, not a real forecast' "
-        "caveat as the rest of this app applies, more so this early in the season when form "
-        "and points-per-game have few games to draw on."
+        "just blank/double gameweek detection. The fixture outlook comes from a goals model "
+        "fitted to this season's actual results once there's enough of it to fit (early on, "
+        "it falls back to a simpler estimate); form and points-per-game are still a simple "
+        "proxy, not a real forecast, and especially noisy this early in the season."
     )
     available_chips = chips.available_chips(bootstrap, chips_used, next_gw)
     if fixtures_data is None:
