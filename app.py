@@ -695,6 +695,24 @@ def _chip_last_played_note(played_gw):
     return f" Last played GW{played_gw}." if played_gw else ""
 
 
+def _chip_unavailable_message(bootstrap, chip_name, played_gw, current_gw):
+    """Body text for a Chip Strategy card that's currently unavailable —
+    names the gameweek it was already played in when known, and always
+    tries to say when it opens up again (FPL grants two of each chip per
+    season, one per half — see chips.next_chip_window_start).
+    """
+    next_start = chips.next_chip_window_start(bootstrap, chip_name, current_gw)
+    if played_gw:
+        msg = f"Already used in GW{played_gw}."
+        if next_start:
+            msg += f" Available again from GW{next_start}."
+    else:
+        msg = "Not available this window."
+        if next_start:
+            msg += f" Available from GW{next_start}."
+    return msg
+
+
 def render_last_updated(label, fetched_at, is_stale_fallback, error):
     fetched_at_local = fetched_at.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
     if is_stale_fallback:
@@ -1513,11 +1531,7 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                     ideal_bench = chip_ranked_next[chip_ranked_next["id"].isin(bench_ids)]
                     bb = chips.suggest_bench_boost(ideal_starters, ideal_bench)
                 if not available_chips.get("bboost"):
-                    muted_msg = (
-                        f"Already used in GW{bboost_played_gw}."
-                        if bboost_played_gw
-                        else "Not available this window."
-                    )
+                    muted_msg = _chip_unavailable_message(bootstrap, "bboost", bboost_played_gw, next_gw)
                     render_chip_card("Bench Boost", muted_msg, "muted")
                 elif bb is None:
                     render_chip_card("Bench Boost", "Not enough data.", "muted")
@@ -1547,11 +1561,7 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                     cap, _ = opt.pick_captain_vice(ideal_starters, score_col="expected_score")
                     tc = chips.suggest_triple_captain(cap)
                 if not available_chips.get("3xc"):
-                    muted_msg = (
-                        f"Already used in GW{triple_captain_played_gw}."
-                        if triple_captain_played_gw
-                        else "Not available this window."
-                    )
+                    muted_msg = _chip_unavailable_message(bootstrap, "3xc", triple_captain_played_gw, next_gw)
                     render_chip_card("Triple Captain", muted_msg, "muted")
                 elif tc is None:
                     render_chip_card("Triple Captain", "Not enough data.", "muted")
@@ -1582,11 +1592,7 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
             with cols[2]:
                 freehit_played_gw = chip_last_played_gw.get("freehit")
                 if not available_chips.get("freehit"):
-                    muted_msg = (
-                        f"Already used in GW{freehit_played_gw}."
-                        if freehit_played_gw
-                        else "Not available this window."
-                    )
+                    muted_msg = _chip_unavailable_message(bootstrap, "freehit", freehit_played_gw, next_gw)
                     render_chip_card("Free Hit", muted_msg, "muted")
                 elif reset["recommend_freehit"]:
                     render_chip_card(
@@ -1617,11 +1623,7 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
             with cols[3]:
                 wildcard_played_gw = chip_last_played_gw.get("wildcard")
                 if not available_chips.get("wildcard"):
-                    muted_msg = (
-                        f"Already used in GW{wildcard_played_gw}."
-                        if wildcard_played_gw
-                        else "Not available this window."
-                    )
+                    muted_msg = _chip_unavailable_message(bootstrap, "wildcard", wildcard_played_gw, next_gw)
                     render_chip_card("Wildcard", muted_msg, "muted")
                 elif reset["recommend_wildcard"]:
                     render_chip_card(

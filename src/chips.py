@@ -50,6 +50,22 @@ def available_chips(bootstrap, chips_used, current_gw):
     return result
 
 
+def next_chip_window_start(bootstrap, chip_name, current_gw):
+    """The start_event of the next not-yet-open window for chip_name after
+    current_gw (whether the current window is still ahead, already used,
+    or this chip hasn't opened for the season at all yet), or None if
+    there isn't a later one — e.g. already in the season's final window.
+    Reads the actual boundary from the API (bootstrap's 'chips' list)
+    rather than hardcoding a gameweek, since it can shift season to season.
+    """
+    upcoming = [
+        chip["start_event"]
+        for chip in bootstrap.get("chips", [])
+        if chip["name"] == chip_name and chip["start_event"] > current_gw
+    ]
+    return min(upcoming) if upcoming else None
+
+
 def suggest_bench_boost(ideal_starters, ideal_bench, score_col="expected_score"):
     """Bench Boost counts your bench's points too — worth it when your
     bench is projected to score close to what your starters are, not just
