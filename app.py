@@ -1246,6 +1246,37 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                     "Ideal XI for next gameweek. Nothing below runs until you turn on a "
                     "toggle or move the slider."
                 )
+                chip_choice = st.radio(
+                    "Planning to play a chip next gameweek?",
+                    ["None", "Wildcard", "Free Hit"],
+                    horizontal=True,
+                    help="FPL doesn't reveal next gameweek's chip choice until you actually "
+                    "set your team, so this can't be detected automatically — tell it here "
+                    "instead. Wildcard and Free Hit both make every transfer free, with no "
+                    "-4 hit cost and no limit from your estimated free transfers. Wildcard's "
+                    "squad sticks for the rest of the season, so its suggestions target the "
+                    "best squad over several upcoming gameweeks; Free Hit's squad reverts "
+                    "right after this gameweek, so it stays focused on just this week.",
+                )
+                lookahead_gws = 1
+                if chip_choice == "Wildcard":
+                    lookahead_gws = st.slider(
+                        "Gameweeks to build the best squad for",
+                        2,
+                        8,
+                        5,
+                        help="Wildcard transfers aren't a one-week decision — the resulting "
+                        "squad stays until your next chip or the season ends. This scores "
+                        "candidates by their outlook over this many upcoming gameweeks "
+                        "instead of just the next one.",
+                    )
+                # No hit ever applies under either chip, and a genuine free rebuild can
+                # reasonably need more than 5 changes -- both the suggestion count and the
+                # free-transfer ceiling passed to suggest_transfers widen accordingly.
+                chip_active = chip_choice in ("Wildcard", "Free Hit")
+                max_transfers = 15 if chip_active else 5
+                effective_free_transfers = 15 if chip_active else free_transfers
+
                 toggle_col1, toggle_col2 = st.columns(2)
                 with toggle_col1:
                     auto_maximize_transfers = st.toggle(
@@ -1267,13 +1298,20 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                 num_transfers_to_consider = st.slider(
                     "Number of transfers to consider",
                     0,
-                    5,
+                    max_transfers,
                     0,
                     disabled=auto_maximize_transfers or maximize_budget_transfers,
-                    help="Looks for up to this many transfers — same position, affordable, "
-                    "and counted against your estimated free transfers — that improve this "
-                    "gameweek's expected score the most, then shows the resulting Ideal XI. "
-                    "Leave it at zero to just see your current squad with no transfers.",
+                    help=(
+                        "Looks for up to this many transfers — same position and affordable — "
+                        "that improve your outlook the most, then shows the resulting Ideal "
+                        "XI. Leave it at zero to just see your current squad with no "
+                        "transfers. No hit cost applies under a Wildcard or Free Hit."
+                        if chip_active
+                        else "Looks for up to this many transfers — same position, affordable, "
+                        "and counted against your estimated free transfers — that improve this "
+                        "gameweek's expected score the most, then shows the resulting Ideal XI. "
+                        "Leave it at zero to just see your current squad with no transfers."
+                    ),
                 )
 
                 if auto_maximize_transfers or maximize_budget_transfers or num_transfers_to_consider > 0:
@@ -1282,13 +1320,22 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                         ranked_all = recommend.recommend_captain(
                             players["id"].tolist(), players, fixtures_data, next_gw
                         )
-                        transfer_pool = ranked_all.assign(score=ranked_all["expected_score"])
+                        if chip_choice == "Wildcard":
+                            # A Wildcard squad sticks around, so candidates are scored on
+                            # their outlook over the next lookahead_gws gameweeks, not just
+                            # the upcoming one.
+                            wc_scored = opt.compute_score(players, form_weight=0.7, ppg_weight=0.3)
+                            transfer_pool = opt.apply_fixture_adjustment(
+                                wc_scored, fixtures_data, next_gw, lookahead_gws, fixture_weight=0.5
+                            )
+                        else:
+                            transfer_pool = ranked_all.assign(score=ranked_all["expected_score"])
                         all_suggestions = opt.suggest_transfers(
                             current_ids,
                             transfer_pool,
                             bank=bank,
-                            num_transfers=5,
-                            free_transfers=free_transfers,
+                            num_transfers=max_transfers,
+                            free_transfers=effective_free_transfers,
                             budget_weight=1.0 if maximize_budget_transfers else 0.0,
                         )
 
@@ -1325,16 +1372,19 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
 
                     transfer_suggestions = all_suggestions[:num_to_use]
 
+                    outlook_phrase = f"over the next {lookahead_gws} gameweeks" if chip_choice == "Wildcard" else "this gameweek"
+
                     if num_to_use == 0:
                         if auto_maximize_transfers or maximize_budget_transfers:
                             st.info(
-                                "No transfer beats your current squad once hit costs are "
-                                "subtracted — 0 transfers is your net-best option, so the "
-                                "Ideal XI above already reflects it."
+                                "No transfer beats your current squad"
+                                + (" once hit costs are subtracted" if not chip_active else "")
+                                + " — 0 transfers is your net-best option, so the Ideal XI "
+                                "above already reflects it."
                             )
                         else:
                             st.info(
-                                "No transfer improves this gameweek's expected score — your "
+                                f"No transfer improves your outlook {outlook_phrase} — your "
                                 "current squad is already your best option."
                             )
                     else:
@@ -1343,8 +1393,9 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                         if auto_maximize_transfers:
                             st.caption(
                                 f"Maximize potential score picked {num_to_use} transfer(s) — "
-                                "the highest net expected score across every count from 0 to "
-                                "5, hit costs included."
+                                f"the highest net expected score across every count from 0 to "
+                                f"{max_transfers}"
+                                + (", hit costs included." if not chip_active else ".")
                             )
                         if maximize_budget_transfers:
                             st.caption(
@@ -1352,8 +1403,16 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                                 "genuinely improve your score, these pick the most "
                                 "expensive affordable option, using expected score to "
                                 "choose between similarly-priced options. Capped to the "
-                                "count that maximizes net expected score, hit costs "
-                                "included."
+                                "count that maximizes net expected score"
+                                + (", hit costs included." if not chip_active else ".")
+                            )
+                        if chip_active:
+                            st.caption(
+                                f"{chip_choice} is active — every transfer above is free, "
+                                "no matter how many. Suggestions still build up one swap at "
+                                "a time rather than solving for the single best full "
+                                "rebuild, so treat this as a strong starting point rather "
+                                "than gospel, especially for a wider overhaul."
                             )
                         for i, t in enumerate(transfer_suggestions, start=1):
                             hit_label = " (-4 hit)" if t["is_hit"] else " (free)"
@@ -1362,7 +1421,7 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                                 f"£{t['out_price']:.1f}m) → **IN:** {t['in_name']} "
                                 f"({t['in_team']}, £{t['in_price']:.1f}m){hit_label}"
                             )
-                            st.caption(f"Expected-score gain: +{t['score_gain']:.1f} this gameweek")
+                            st.caption(f"Expected-score gain: +{t['score_gain']:.1f} {outlook_phrase}")
 
                         new_ranked = ranked_all[ranked_all["id"].isin(_apply_transfers(num_to_use))].copy()
                         new_ranked["next_opp"] = new_ranked["team"].map(next_opp_by_team).fillna("—")
@@ -1395,8 +1454,12 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                             nm3.metric(
                                 "Transfer-hit cost",
                                 f"{-total_hits}",
-                                help="Points lost to -4 hits on transfers beyond your free "
-                                "transfers, not yet subtracted from the expected score above.",
+                                help=(
+                                    f"Always zero — {chip_choice} makes every transfer free."
+                                    if chip_active
+                                    else "Points lost to -4 hits on transfers beyond your free "
+                                    "transfers, not yet subtracted from the expected score above."
+                                ),
                             )
                             new_label = f"**Suggested captain: {new_cap['web_name']}**"
                             if new_vice is not None:
