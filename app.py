@@ -163,13 +163,19 @@ hr {{
     box-shadow: 0 0 0 3px rgba(255, 40, 130, 0.15) !important;
 }}
 
-/* height: 100% (Streamlit's column row already stretches every column to
-   match the tallest one) so a metric with no delta chip — e.g. Free
-   transfers — still fills the same card height as its row-mates, instead
-   of shrink-wrapping to its own shorter content. */
+/* A fixed min-height, not height: 100% -- st.columns(vertical_alignment=...)
+   never stretches columns to a shared row height regardless of the value
+   passed (its default is "top", not "stretch"), so each column, and the
+   metric inside it, only ever sizes to its own content. Without this, a
+   metric with no delta chip -- e.g. Free transfers -- renders visibly
+   shorter than its row-mates instead of matching their card height.
+   119px comfortably fits every card observed so far (label + value +
+   delta chip, with this padding); if a future card's content grows
+   taller than that, it'll simply grow the row instead of clipping, since
+   min-height only sets a floor, not a ceiling. */
 [data-testid="stMetric"] {{
     position: relative;
-    height: 100%;
+    min-height: 119px;
     background: linear-gradient(160deg, {PL_SURFACE_HI} 0%, {PL_SURFACE} 65%);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 14px;
