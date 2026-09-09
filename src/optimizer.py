@@ -17,6 +17,18 @@ SQUAD_QUOTA = {"GKP": 2, "DEF": 5, "MID": 5, "FWD": 3}
 STARTING_MIN = {"GKP": 1, "DEF": 3, "MID": 2, "FWD": 1}
 STARTING_MAX = {"GKP": 1, "DEF": 5, "MID": 5, "FWD": 3}
 MAX_PER_CLUB = 3
+# Two players in the same position from the same club are a correlated bet,
+# not two independent ones — if that club has a bad defensive or attacking
+# week, both go quiet together. Rather than a hard cap on how many a squad
+# can hold, the optimizer and transfer suggester apply a soft score penalty
+# to such a pair, sized by how far the WEAKER of the two falls short of an
+# "elite" bar (that position's own DIVERSIFICATION_ELITE_PERCENTILE score in
+# the current player pool). Two genuinely elite teammates cost nothing to
+# pair; a strong player alongside a mediocre one from the same club is
+# discouraged, since the mediocre pick's value is most likely to evaporate
+# exactly when the strong one's does too.
+DIVERSIFICATION_ELITE_PERCENTILE = 0.85
+DIVERSIFICATION_PENALTY_SCALE = 3.0  # points-equivalent penalty per unit of shortfall below the elite bar
 BENCH_WEIGHT = 0.02  # keeps bench selection meaningful without competing with the XI
 UNAVAILABLE_STATUSES = {"i", "s", "u"}  # injured, suspended, unavailable/left club
 SPEND_BONUS_SCALE = 40  # points-equivalent bonus for spending 100% of budget, at budget_weight=1
@@ -208,6 +220,26 @@ def apply_fixture_adjustment(scored_df, fixtures, start_gw, num_gws, fixture_wei
     return df
 
 
+def _position_elite_thresholds(df):
+    """{position: score at the DIVERSIFICATION_ELITE_PERCENTILE within that
+    position}, for the diversification penalty below. Computed fresh from
+    whatever pool is being considered rather than a fixed constant, since
+    the "score" scale itself shifts with the weights it was built from.
+    """
+    return {
+        pos: df.loc[df["position"] == pos, "score"].quantile(DIVERSIFICATION_ELITE_PERCENTILE)
+        for pos in df["position"].unique()
+    }
+
+
+def _diversification_penalty(score_a, score_b, elite_threshold):
+    """Points-equivalent penalty for rostering/buying two same-club,
+    same-position players together — see DIVERSIFICATION_PENALTY_SCALE.
+    """
+    shortfall = max(elite_threshold - min(score_a, score_b), 0)
+    return DIVERSIFICATION_PENALTY_SCALE * shortfall
+
+
 def optimize_squad(players_df, budget=100.0, exclude_unavailable=True, formation=None, budget_weight=0.0):
     """Pick the best 15-man squad + starting XI under budget/quota/club-limit
     constraints. Returns a squad dataframe (15 rows, with is_starting and
@@ -223,6 +255,10 @@ def optimize_squad(players_df, budget=100.0, exclude_unavailable=True, formation
     the full budget is worth up to SPEND_BONUS_SCALE points-equivalent,
     which can outweigh small score differences and pull picks toward
     pricier players even when they don't score much higher.
+
+    Also discourages (but doesn't forbid) rostering two same-club,
+    same-position players unless both are genuinely elite — see
+    DIVERSIFICATION_PENALTY_SCALE.
     """
     df = players_df.reset_index(drop=True)
     if exclude_unavailable:
@@ -234,12 +270,36 @@ def optimize_squad(players_df, budget=100.0, exclude_unavailable=True, formation
     squad_vars = {i: pulp.LpVariable(f"squad_{i}", cat="Binary") for i in df.index}
     start_vars = {i: pulp.LpVariable(f"start_{i}", cat="Binary") for i in df.index}
 
+    # Same-club, same-position pairs get a soft penalty (see
+    # DIVERSIFICATION_PENALTY_SCALE) instead of a hard cap: a "both selected"
+    # binary per risky pair, wired to cost points in the objective only when
+    # the optimizer actually picks both.
+    elite_thresholds = _position_elite_thresholds(df)
+    diversification_terms = []
+    for (_, pos), group in df.groupby(["team_name", "position"]):
+        idxs = group.index.tolist()
+        threshold = elite_thresholds.get(pos, 0)
+        for a in range(len(idxs)):
+            for b in range(a + 1, len(idxs)):
+                i, j = idxs[a], idxs[b]
+                penalty = _diversification_penalty(df.loc[i, "score"], df.loc[j, "score"], threshold)
+                if penalty <= 0:
+                    continue
+                pair_var = pulp.LpVariable(f"pair_{i}_{j}", cat="Binary")
+                prob += pair_var <= squad_vars[i]
+                prob += pair_var <= squad_vars[j]
+                prob += pair_var >= squad_vars[i] + squad_vars[j] - 1
+                diversification_terms.append(penalty * pair_var)
+
     spend_bonus_per_unit_price = budget_weight * SPEND_BONUS_SCALE / budget
-    prob += pulp.lpSum(
-        start_vars[i] * df.loc[i, "score"]
-        + BENCH_WEIGHT * squad_vars[i] * df.loc[i, "score"]
-        + spend_bonus_per_unit_price * squad_vars[i] * df.loc[i, "price"]
-        for i in df.index
+    prob += (
+        pulp.lpSum(
+            start_vars[i] * df.loc[i, "score"]
+            + BENCH_WEIGHT * squad_vars[i] * df.loc[i, "score"]
+            + spend_bonus_per_unit_price * squad_vars[i] * df.loc[i, "price"]
+            for i in df.index
+        )
+        - pulp.lpSum(diversification_terms)
     )
 
     prob += pulp.lpSum(squad_vars[i] for i in df.index) == 15
@@ -402,7 +462,13 @@ def suggest_transfers(
     buy one.
 
     Every candidate considered must genuinely improve score (gain > 0) —
-    this never suggests a downgrade, regardless of budget_weight.
+    this never suggests a downgrade, regardless of budget_weight. A
+    candidate that would pair the incoming player with an existing
+    same-club, same-position squad-mate has its gain reduced by the same
+    diversification penalty used in optimize_squad (see
+    DIVERSIFICATION_PENALTY_SCALE) before that check, so a marginal
+    upgrade that also concentrates risk in one club needs to clear a
+    higher bar.
 
     budget_weight (0-1) changes which improving swap "best" means among
     those that pass the gain > 0 gate. At 0 (default), the highest-gain
@@ -422,6 +488,7 @@ def suggest_transfers(
     """
     df = players_df.reset_index(drop=True)
     buy_pool = df[~df["status"].isin(UNAVAILABLE_STATUSES)] if exclude_unavailable else df
+    elite_thresholds = _position_elite_thresholds(df)
 
     by_id = df.set_index("id")
     squad_ids = list(current_ids)
@@ -454,6 +521,14 @@ def suggest_transfers(
             sell_price = out_row["price"]
             budget_for_buy = remaining_bank + sell_price
             out_club_count_after = club_counts.get(out_row["team_name"], 0) - 1
+            # Remaining squad-mates at this position, for the same-club
+            # diversification penalty below (out_id itself is leaving).
+            same_position_teammates = [
+                pid
+                for pid in squad_ids
+                if pid != out_id and pid in by_id.index and by_id.loc[pid, "position"] == out_row["position"]
+            ]
+            elite_threshold = elite_thresholds.get(out_row["position"], 0)
 
             candidates = buy_pool[
                 (buy_pool["position"] == out_row["position"])
@@ -468,7 +543,14 @@ def suggest_transfers(
                     club_after = club_counts.get(in_row["team_name"], 0) + 1
                 if club_after > MAX_PER_CLUB:
                     continue
-                gain = in_row["score"] - out_row["score"]
+                # Buying in_row alongside an existing same-club, same-position
+                # teammate is a correlated bet — see DIVERSIFICATION_PENALTY_SCALE.
+                diversification_penalty = sum(
+                    _diversification_penalty(in_row["score"], by_id.loc[tid, "score"], elite_threshold)
+                    for tid in same_position_teammates
+                    if by_id.loc[tid, "team_name"] == in_row["team_name"]
+                )
+                gain = in_row["score"] - out_row["score"] - diversification_penalty
                 if gain <= 0:
                     continue
                 price_delta = in_row["price"] - sell_price
