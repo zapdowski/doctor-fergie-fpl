@@ -1144,9 +1144,9 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                 im1, im2 = st.columns(2, vertical_alignment="center")
                 im1.metric("Ideal formation", ideal_formation)
                 im2.metric("Expected score (XI)", f"{ideal_starters['expected_score'].sum():.1f}")
-                label = f"Suggested captain: {cap['web_name']}"
+                label = f"Suggested Captain: {cap['web_name']}"
                 if vice is not None:
-                    label += f" · Vice-captain: {vice['web_name']}"
+                    label += f" · Vice-Captain: {vice['web_name']}"
                 st.markdown(f"**{label}**")
 
                 actual_starting_ids = {p["element"] for p in current_picks["picks"] if p["position"] <= 11}
@@ -1408,9 +1408,9 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                                     "transfers, not yet subtracted from the expected score above."
                                 ),
                             )
-                            new_label = f"Suggested captain: {new_cap['web_name']}"
+                            new_label = f"Suggested Captain: {new_cap['web_name']}"
                             if new_vice is not None:
-                                new_label += f" · Vice-captain: {new_vice['web_name']}"
+                                new_label += f" · Vice-Captain: {new_vice['web_name']}"
                             st.markdown(f"**{new_label}**")
                             st.dataframe(
                                 new_starters[list(ideal_display_cols)].rename(columns=ideal_display_cols),
