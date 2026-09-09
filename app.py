@@ -1270,12 +1270,15 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                         "candidates by their outlook over this many upcoming gameweeks "
                         "instead of just the next one.",
                     )
-                # No hit ever applies under either chip, and a genuine free rebuild can
-                # reasonably need more than 5 changes -- both the suggestion count and the
-                # free-transfer ceiling passed to suggest_transfers widen accordingly.
+                # No hit ever applies under either chip, and every player is genuinely up
+                # for replacement -- both the suggestion count and the free-transfer
+                # ceiling passed to suggest_transfers widen to the whole squad accordingly,
+                # not just a somewhat-higher number. Position quotas, the budget, and the
+                # max-3-per-club rule (all still enforced inside suggest_transfers) are the
+                # only real limits on how much of the squad can actually turn over.
                 chip_active = chip_choice in ("Wildcard", "Free Hit")
-                max_transfers = 15 if chip_active else 5
-                effective_free_transfers = 15 if chip_active else free_transfers
+                max_transfers = len(current_ids) if chip_active else 5
+                effective_free_transfers = len(current_ids) if chip_active else free_transfers
 
                 toggle_col1, toggle_col2 = st.columns(2)
                 with toggle_col1:
