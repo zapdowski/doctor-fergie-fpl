@@ -1763,10 +1763,6 @@ try:
 except fpl_api.FPLAPIError as e:
     fixtures, fx_fetched_at, fx_stale, fx_error = None, None, False, str(e)
 
-render_last_updated("Player data", bs_fetched_at, bs_stale, bs_error)
-if fixtures is not None:
-    render_last_updated("Fixtures", fx_fetched_at, fx_stale, fx_error)
-
 players = build_player_table(bootstrap)
 
 tab_team_builder, tab_season_overview, tab_player_base, tab_optimizer_draft = st.tabs(
@@ -1780,3 +1776,12 @@ with tab_player_base:
     render_players_tab(bootstrap, fixtures, fx_error, manual_refresh)
 with tab_optimizer_draft:
     render_optimizer_tab(bootstrap, players, fixtures, force_refresh)
+
+# A plain, normal-flow footer (not fixed/sticky) placed after every tab's
+# content — however long a given tab's content gets, on any screen size,
+# this always ends up directly below it with no overlap, since normal
+# document flow can never overlap regardless of what precedes it.
+st.divider()
+render_last_updated("Player data", bs_fetched_at, bs_stale, bs_error)
+if fixtures is not None:
+    render_last_updated("Fixtures", fx_fetched_at, fx_stale, fx_error)
