@@ -745,9 +745,9 @@ def render_players_tab(bootstrap, fixtures, fx_error, manual_refresh):
         "total_points": "Total Points",
         "underlying_form": "Form",
         "points_per_game": "Points Per Game",
-        "last_season_ppg": "Last Season PPG",
+        "last_season_ppg": "Last Season Points Per 90",
         "price": "Price",
-        "selected_by_percent": "Selected By %",
+        "selected_by_percent": "Selected By Percentage",
         "ict_index": "ICT Index",
     }
     sort_col = st.selectbox(
@@ -766,15 +766,15 @@ def render_players_tab(bootstrap, fixtures, fx_error, manual_refresh):
     display_cols = {
         "player": "Player",
         "team_name": "Team",
-        "position": "Pos",
-        "price": "£m",
+        "position": "Position",
+        "price": "Price (£ Millions)",
         "underlying_form": "Form",
-        "total_points": "Pts",
-        "points_per_game": "PPG",
-        "last_season_ppg_display": "Last Season PPG",
-        "selected_by_percent": "Owned %",
-        "ict_index": "ICT",
-        "minutes": "Mins",
+        "total_points": "Total Points",
+        "points_per_game": "Points Per Game",
+        "last_season_ppg_display": "Last Season Points Per 90",
+        "selected_by_percent": "Selected By Percentage",
+        "ict_index": "ICT Index",
+        "minutes": "Minutes Played",
         "status_label": "Status",
     }
     st.dataframe(
@@ -792,7 +792,7 @@ def render_players_tab(bootstrap, fixtures, fx_error, manual_refresh):
                     "which can be lucky/unlucky in small samples."
                 ),
             ),
-            "Last Season PPG": st.column_config.TextColumn(
+            "Last Season Points Per 90": st.column_config.TextColumn(
                 help=(
                     "Points per 90 minutes last season. '—' means no qualifying prior season "
                     "(promoted-team debutant, new-to-the-league signing, or too few minutes)."
@@ -836,12 +836,16 @@ def render_fixtures_tab(bootstrap, fixtures_data, fx_error):
     c1, c2 = st.columns(2, vertical_alignment="center")
     with c1:
         st.caption("Easiest average fixtures")
-        best = avg_fdr.sort_values().head(5).rename("Avg FDR").to_frame()
-        st.dataframe(best.style.apply(lambda s: fx.style_fdr_column(s), subset=["Avg FDR"]))
+        best = avg_fdr.sort_values().head(5).rename("Average Fixture Difficulty").to_frame()
+        st.dataframe(
+            best.style.apply(lambda s: fx.style_fdr_column(s), subset=["Average Fixture Difficulty"])
+        )
     with c2:
         st.caption("Hardest average fixtures")
-        worst = avg_fdr.sort_values(ascending=False).head(5).rename("Avg FDR").to_frame()
-        st.dataframe(worst.style.apply(lambda s: fx.style_fdr_column(s), subset=["Avg FDR"]))
+        worst = avg_fdr.sort_values(ascending=False).head(5).rename("Average Fixture Difficulty").to_frame()
+        st.dataframe(
+            worst.style.apply(lambda s: fx.style_fdr_column(s), subset=["Average Fixture Difficulty"])
+        )
 
     st.markdown("#### Fixture List")
     all_gws = sorted({f["event"] for f in fixtures_data if f.get("event")})
@@ -867,16 +871,16 @@ def render_fixtures_tab(bootstrap, fixtures_data, fx_error):
             {
                 "Kickoff": kickoff_local,
                 "Home": team_name.get(f["team_h"], "?"),
-                "FDR (H)": f["team_h_difficulty"],
+                "Fixture Difficulty (Home)": f["team_h_difficulty"],
                 "Away": team_name.get(f["team_a"], "?"),
-                "FDR (A)": f["team_a_difficulty"],
+                "Fixture Difficulty (Away)": f["team_a_difficulty"],
                 "Score": score,
             }
         )
     fixtures_df = pd.DataFrame(rows).sort_values("Kickoff")
     st.dataframe(
-        fixtures_df.style.apply(lambda s: fx.style_fdr_column(s), subset=["FDR (H)"])
-        .apply(lambda s: fx.style_fdr_column(s), subset=["FDR (A)"]),
+        fixtures_df.style.apply(lambda s: fx.style_fdr_column(s), subset=["Fixture Difficulty (Home)"])
+        .apply(lambda s: fx.style_fdr_column(s), subset=["Fixture Difficulty (Away)"]),
         use_container_width=True,
         hide_index=True,
     )
@@ -1112,14 +1116,27 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
     squad_df["display_name"] = squad_df["web_name"] + squad_df["role"].map(
         {"C": " (C)", "VC": " (VC)"}
     ).fillna("")
+    if fixtures_data is not None:
+        squad_ranked = recommend.recommend_captain(
+            squad_df["id"].tolist(), players, fixtures_data, next_gw
+        )
+        squad_df = squad_df.merge(squad_ranked[["id", "expected_score"]], on="id", how="left")
+    else:
+        squad_df["expected_score"] = pd.NA
+    # Pre-formatted as text (rather than a NumberColumn) so a missing value
+    # (no fixture data available) renders as "—" instead of Streamlit's
+    # NaN-in-NumberColumn "None" text.
+    squad_df["expected_points_display"] = squad_df["expected_score"].apply(
+        lambda v: f"{v:.1f}" if pd.notna(v) else "—"
+    )
     display_cols = {
         "display_name": "Player",
         "team_name": "Team",
-        "position": "Pos",
-        "price": "£m",
-        "gw_points": "Pts",
-        "effective_points": "Total",
-        "next_opp": "Next",
+        "position": "Position",
+        "price": "Price (£ Millions)",
+        "total_points": "Total Points",
+        "expected_points_display": "Expected Points (Next Gameweek)",
+        "next_opp": "Next Opponent",
     }
     starters = squad_df[squad_df["is_starting"]]
     bench = squad_df[~squad_df["is_starting"]]
@@ -1193,22 +1210,22 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                 ideal_display_cols = {
                     "web_name": "Player",
                     "team_name": "Team",
-                    "position": "Pos",
-                    "next_opp": "Next",
-                    "expected_score": "Expected",
+                    "position": "Position",
+                    "next_opp": "Next Opponent",
+                    "expected_score": "Expected Points",
                 }
                 st.dataframe(
                     ideal_starters[list(ideal_display_cols)].rename(columns=ideal_display_cols),
                     use_container_width=True,
                     hide_index=True,
-                    column_config={"Expected": st.column_config.NumberColumn(format="%.1f")},
+                    column_config={"Expected Points": st.column_config.NumberColumn(format="%.1f")},
                 )
                 st.caption("Bench")
                 st.dataframe(
                     ideal_bench[list(ideal_display_cols)].rename(columns=ideal_display_cols),
                     use_container_width=True,
                     hide_index=True,
-                    column_config={"Expected": st.column_config.NumberColumn(format="%.1f")},
+                    column_config={"Expected Points": st.column_config.NumberColumn(format="%.1f")},
                 )
 
                 st.markdown("#### Transfer Matrix")
@@ -1377,14 +1394,14 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                                 new_starters[list(ideal_display_cols)].rename(columns=ideal_display_cols),
                                 use_container_width=True,
                                 hide_index=True,
-                                column_config={"Expected": st.column_config.NumberColumn(format="%.1f")},
+                                column_config={"Expected Points": st.column_config.NumberColumn(format="%.1f")},
                             )
                             st.caption("Bench")
                             st.dataframe(
                                 new_bench[list(ideal_display_cols)].rename(columns=ideal_display_cols),
                                 use_container_width=True,
                                 hide_index=True,
-                                column_config={"Expected": st.column_config.NumberColumn(format="%.1f")},
+                                column_config={"Expected Points": st.column_config.NumberColumn(format="%.1f")},
                             )
 
     st.markdown("#### Chip Strategy")
@@ -1538,15 +1555,15 @@ def render_squad_table(squad_df, caption, next_opponents=None):
     display_cols = {
         "display_name": "Player",
         "team_name": "Team",
-        "position": "Pos",
-        "price": "£m",
-        "score": "Score",
+        "position": "Position",
+        "price": "Price (£ Millions)",
+        "score": "Predicted Score",
     }
     df = squad_df.copy()
     df["display_name"] = df["web_name"] + df["role"].map({"C": " (C)", "VC": " (VC)"}).fillna("")
     if next_opponents is not None:
         df["next_3"] = df["team"].map(next_opponents).fillna("—")
-        display_cols["next_3"] = "Next 3"
+        display_cols["next_3"] = "Next 3 Opponents"
     st.caption(caption)
     st.dataframe(
         df[list(display_cols)].rename(columns=display_cols),
