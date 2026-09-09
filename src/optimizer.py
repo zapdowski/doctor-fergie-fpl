@@ -33,6 +33,13 @@ CLEAN_SHEET_POINTS = {"GKP": 4, "DEF": 4, "MID": 1, "FWD": 0}
 ASSIST_POINTS = 3
 SAVE_POINTS_PER_SAVE = 1 / 3
 MIN_MINUTES_FOR_UNDERLYING_FORM = 60  # ~1 full match; below this, per-90 rates are wild noise
+# A player just past MIN_MINUTES_FOR_UNDERLYING_FORM (e.g. 63 minutes) is still a
+# tiny, noisy sample — one lucky big chance can extrapolate to an absurd per-90
+# rate. Confidence in the per-90 rate ramps linearly from 0 at the noise floor
+# up to full weight once a player has racked up this many minutes (~2 full
+# matches) — enough to smooth out a single-cameo fluke without taking half a
+# season to trust an established starter's rate.
+FULL_CONFIDENCE_MINUTES = 180
 
 # Threat/creativity are FPL's own ICT-index components (shot-based attacking
 # threat, chance-creation) — the closest public proxy for shots/shots-on-target
@@ -76,7 +83,12 @@ def compute_underlying_form(players_df, min_minutes=MIN_MINUTES_FOR_UNDERLYING_F
     per 90 (clipped to [0, 1]) — a rough but explainable proxy, not a real
     probability model. Players under min_minutes get 0: with so few
     minutes, a per-90 rate is more noise than signal (a single stoppage-time
-    cameo goal would otherwise imply an absurd scoring rate).
+    cameo goal would otherwise imply an absurd scoring rate). Above that
+    floor, confidence in the per-90 rate ramps linearly up to
+    FULL_CONFIDENCE_MINUTES — a player a few minutes past the floor still
+    has a tiny, noisy sample (one lucky chance can extrapolate to an absurd
+    rate), so their estimate is scaled down proportionally rather than
+    given the same full weight as an established starter.
 
     Also folds in, for all positions, a small threat/creativity component
     (FPL's own ICT-index proxies for shot volume and chance creation — the
@@ -116,7 +128,8 @@ def compute_underlying_form(players_df, min_minutes=MIN_MINUTES_FOR_UNDERLYING_F
         + (threat90 + creativity90) * ICT_COMPONENT_SCALE
         + dc_contribution
     )
-    df["underlying_form"] = underlying.where(minutes >= min_minutes, 0.0)
+    confidence = ((minutes - min_minutes) / (FULL_CONFIDENCE_MINUTES - min_minutes)).clip(lower=0, upper=1)
+    df["underlying_form"] = underlying * confidence
     return df
 
 
