@@ -163,8 +163,13 @@ hr {{
     box-shadow: 0 0 0 3px rgba(255, 40, 130, 0.15) !important;
 }}
 
+/* height: 100% (Streamlit's column row already stretches every column to
+   match the tallest one) so a metric with no delta chip — e.g. Free
+   transfers — still fills the same card height as its row-mates, instead
+   of shrink-wrapping to its own shorter content. */
 [data-testid="stMetric"] {{
     position: relative;
+    height: 100%;
     background: linear-gradient(160deg, {PL_SURFACE_HI} 0%, {PL_SURFACE} 65%);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 14px;
@@ -1007,20 +1012,23 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
         "Overall points",
         entry.get("summary_overall_points"),
         delta=gw_info.get("points"),
-        help="How many points you scored this gameweek.",
+        help="Your total points across the whole season so far. The change below "
+        "is how many points you scored this gameweek.",
     )
     m2.metric(
         "Overall rank",
         f"{entry.get('summary_overall_rank'):,}" if entry.get("summary_overall_rank") else "—",
         delta=f"{deltas['overall_rank_delta']:,}" if deltas else None,
-        help="How your overall rank moved since the previous gameweek — a positive "
-        "number means you climbed the rankings.",
+        help="Your rank out of every Fantasy Premier League manager worldwide, by "
+        "total points. The change below is how it moved since the previous "
+        "gameweek — a positive number means you climbed the rankings.",
     )
     m3.metric(
         f"GW{current_event} points",
         gw_info.get("points"),
         delta=deltas["points_delta"] if deltas else None,
-        help="How many more or fewer points you scored compared to the previous gameweek.",
+        help="Points scored in this specific gameweek. The change below is how "
+        "many more or fewer than the previous gameweek.",
     )
     m4, m5, m6 = st.columns(3, vertical_alignment="center")
     m4.metric(
@@ -1029,20 +1037,25 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
         # The sign has to be the very first character or Streamlit's delta
         # color/arrow logic misreads it — "£-0.2m" reads as positive.
         delta=_signed_gbp(deltas["bank_delta"]) if deltas else None,
-        help="How much your bank balance has grown or shrunk since the previous gameweek.",
+        help="Money left unspent after your squad, held in reserve for future "
+        "transfers. The change below is how much it's grown or shrunk since "
+        "the previous gameweek.",
     )
     m5.metric(
         "Squad value",
         f"£{gw_info.get('value', 0) / 10:.1f}m",
         delta=_signed_gbp(deltas["value_delta"]) if deltas else None,
-        help="How much your squad's total value has grown or shrunk since the previous gameweek.",
+        help="The current market value of your 15-man squad, which can rise or "
+        "fall from player price changes alone, even without making transfers. "
+        "The change below is how much it's grown or shrunk since the previous "
+        "gameweek.",
     )
     m6.metric(
         "Free transfers",
         free_transfers,
-        help="FPL does not expose free transfers remaining directly, so this is "
-        "a best-effort estimate from your transfer history, not guaranteed "
-        "accurate.",
+        help="How many transfers you can make this gameweek without a -4 point "
+        "hit. FPL does not expose this number directly, so it's a best-effort "
+        "estimate from your transfer history, not guaranteed accurate.",
     )
 
     chips_used = history.get("chips", [])
