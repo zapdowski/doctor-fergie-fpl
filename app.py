@@ -1066,6 +1066,14 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
 
     chips_used = history.get("chips", [])
 
+    # Blended into every captain/transfer/chip suggestion below (see
+    # recommend.recommend_captain), matching Optimizer Draft's default
+    # scoring so the two tabs judge players the same way. Cached under a
+    # fixed key, so this is a no-op fetch if PlayerBase or Optimizer Draft
+    # already pulled it this session.
+    with st.spinner("Fetching last-season stats for all players (first time only)..."):
+        prior_stats, _, _, _ = load_prior_season_stats(tuple(players["id"]))
+
     st.markdown("#### Squad")
     squad_df = team.build_squad_df(picks, players, live=live)
     squad_df["next_opp"] = squad_df["team"].map(next_opp_by_team).fillna("—")
@@ -1074,7 +1082,7 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
     ).fillna("")
     if fixtures_data is not None:
         squad_ranked = recommend.recommend_captain(
-            squad_df["id"].tolist(), players, fixtures_data, next_gw
+            squad_df["id"].tolist(), players, fixtures_data, next_gw, prior_stats=prior_stats
         )
         squad_df = squad_df.merge(squad_ranked[["id", "expected_score"]], on="id", how="left")
     else:
@@ -1126,7 +1134,9 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
 
         if current_picks is not None:
             current_ids = [p["element"] for p in current_picks["picks"]]
-            ranked = recommend.recommend_captain(current_ids, players, fixtures_data, next_gw)
+            ranked = recommend.recommend_captain(
+                current_ids, players, fixtures_data, next_gw, prior_stats=prior_stats
+            )
             ranked["next_opp"] = ranked["team"].map(next_opp_by_team).fillna("—")
             result = opt.best_starting_xi(ranked, score_col="expected_score") if not ranked.empty else None
             if result is None:
@@ -1265,13 +1275,14 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                     with st.spinner("Scanning every player for the best transfers..."):
                         bank = current_picks["entry_history"].get("bank", 0) / 10.0
                         ranked_all = recommend.recommend_captain(
-                            players["id"].tolist(), players, fixtures_data, next_gw
+                            players["id"].tolist(), players, fixtures_data, next_gw, prior_stats=prior_stats
                         )
                         if chip_choice == "Wildcard":
                             # A Wildcard squad sticks around, so candidates are scored on
                             # their outlook over the next lookahead_gws gameweeks, not just
                             # the upcoming one.
                             wc_scored = opt.compute_score(players, form_weight=0.7, ppg_weight=0.3)
+                            wc_scored = opt.apply_last_season_adjustment(wc_scored, prior_stats, weight=0.3)
                             transfer_pool = opt.apply_fixture_adjustment(
                                 wc_scored, fixtures_data, next_gw, lookahead_gws, fixture_weight=0.5
                             )
@@ -1451,7 +1462,9 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
 
         if chip_picks is not None:
             chip_current_ids = [p["element"] for p in chip_picks["picks"]]
-            chip_ranked_next = recommend.recommend_captain(chip_current_ids, players, fixtures_data, next_gw)
+            chip_ranked_next = recommend.recommend_captain(
+                chip_current_ids, players, fixtures_data, next_gw, prior_stats=prior_stats
+            )
             chip_xi = (
                 opt.best_starting_xi(chip_ranked_next, score_col="expected_score")
                 if not chip_ranked_next.empty
@@ -1524,7 +1537,7 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
             bank = chip_picks["entry_history"].get("bank", 0) / 10.0
             value = chip_picks["entry_history"].get("value", 0) / 10.0
             reset = chips.suggest_reset_chip(
-                players, chip_current_ids, fixtures_data, next_gw, budget=bank + value
+                players, chip_current_ids, fixtures_data, next_gw, budget=bank + value, prior_stats=prior_stats
             )
 
             with cols[2]:

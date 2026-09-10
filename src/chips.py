@@ -136,6 +136,8 @@ def suggest_reset_chip(
     ppg_weight=0.3,
     fixture_weight=0.5,
     lookahead_gws=5,
+    prior_stats=None,
+    last_season_weight=0.3,
 ):
     """Compare the manager's current squad against an optimal one at the
     same budget, both for just next_gw (Free Hit territory — a one-week
@@ -143,11 +145,24 @@ def suggest_reset_chip(
     territory — a permanent reset). budget should reflect the manager's
     real spending power (current squad value + bank), so the "optimal"
     comparison is achievable, not aspirational.
+
+    prior_stats/last_season_weight (see optimizer.apply_last_season_adjustment)
+    match Optimizer Draft's default scoring methodology, so the "optimal"
+    squad this suggests is judged the same way as the Optimizer Draft
+    tab's own "Maximize score" — otherwise the two could point to
+    different squads at the same budget purely from scoring differently.
     """
     all_ids = players_df["id"].tolist()
 
     ranked_next = recommend.recommend_captain(
-        all_ids, players_df, fixtures_data, next_gw, form_weight, ppg_weight
+        all_ids,
+        players_df,
+        fixtures_data,
+        next_gw,
+        form_weight,
+        ppg_weight,
+        prior_stats=prior_stats,
+        last_season_weight=last_season_weight,
     )
     current_next, optimal_next = _current_vs_optimal(
         ranked_next, current_ids, budget, "expected_score"
@@ -155,6 +170,8 @@ def suggest_reset_chip(
     gap_next = max(0.0, (optimal_next - current_next) / current_next) if current_next > 0 else 0.0
 
     scored_5gw = opt.compute_score(players_df, form_weight=form_weight, ppg_weight=ppg_weight)
+    if prior_stats:
+        scored_5gw = opt.apply_last_season_adjustment(scored_5gw, prior_stats, weight=last_season_weight)
     scored_5gw = opt.apply_fixture_adjustment(
         scored_5gw, fixtures_data, next_gw, lookahead_gws, fixture_weight=fixture_weight
     )

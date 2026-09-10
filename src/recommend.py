@@ -1,9 +1,9 @@
 """Captain/vice-captain recommendation for a specific gameweek.
 
-Combines the optimizer's form/points-per-game score proxy with that
-gameweek's fixture-specific outlook, so a player with an easy fixture (or
-a double gameweek) ranks above one with a tough game or a blank — which
-the season-average score alone wouldn't capture.
+Combines the optimizer's form/points-per-game/last-season score proxy with
+that gameweek's fixture-specific outlook, so a player with an easy fixture
+(or a double gameweek) ranks above one with a tough game or a blank —
+which the season-average score alone wouldn't capture.
 
 The fixture outlook itself comes from forecast.py's expected-goals model,
 fit from this season's actual results, whenever there's enough data:
@@ -33,12 +33,31 @@ def _team_fixtures_for_gw(fixtures, gw):
     return result
 
 
-def recommend_captain(current_ids, players_df, fixtures, gw, form_weight=0.7, ppg_weight=0.3):
+def recommend_captain(
+    current_ids,
+    players_df,
+    fixtures,
+    gw,
+    form_weight=0.7,
+    ppg_weight=0.3,
+    prior_stats=None,
+    last_season_weight=0.3,
+):
     """Rank the given player ids (typically a squad's starting XI) by
     expected score for gameweek `gw`, highest first. Returns a dataframe
     with 'expected_score' and 'fixture_count' (0 = blank gameweek).
+
+    prior_stats/last_season_weight (see optimizer.apply_last_season_adjustment)
+    blend in each player's last-completed-season points-per-90 as a
+    stabilizing prior — the same default methodology Optimizer Draft's
+    "Maximize score" uses, so Team Builder's captain, transfer, and chip
+    suggestions are scored consistently with it rather than on a form/PPG-
+    only proxy. Pass prior_stats=None (the default) to skip this, e.g.
+    before it's been fetched yet.
     """
     scored = opt.compute_score(players_df, form_weight=form_weight, ppg_weight=ppg_weight)
+    if prior_stats:
+        scored = opt.apply_last_season_adjustment(scored, prior_stats, weight=last_season_weight)
     scored = scored[scored["id"].isin(current_ids)].copy()
 
     strengths, home_advantage, league_avg_attack = forecast.fit_team_strengths_from_players(fixtures, players_df)
