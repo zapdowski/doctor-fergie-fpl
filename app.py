@@ -1096,9 +1096,14 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
         {"C": " (C)", "VC": " (VC)"}
     ).fillna("")
     if fixtures_data is not None:
-        squad_ranked = recommend.recommend_captain(
-            squad_df["id"].tolist(), players, fixtures_data, next_gw, prior_stats=prior_stats
-        )
+        try:
+            squad_ranked = recommend.recommend_captain(
+                squad_df["id"].tolist(), players, fixtures_data, next_gw, prior_stats=prior_stats
+            )
+        except Exception:
+            import traceback
+            st.code(traceback.format_exc())
+            st.stop()
         squad_df = squad_df.merge(squad_ranked[["id", "expected_score"]], on="id", how="left")
     else:
         squad_df["expected_score"] = pd.NA
