@@ -1096,14 +1096,9 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
         {"C": " (C)", "VC": " (VC)"}
     ).fillna("")
     if fixtures_data is not None:
-        try:
-            squad_ranked = recommend.recommend_captain(
-                squad_df["id"].tolist(), players, fixtures_data, next_gw, prior_stats=prior_stats
-            )
-        except Exception:
-            import traceback
-            st.code(traceback.format_exc())
-            st.stop()
+        squad_ranked = recommend.recommend_captain(
+            squad_df["id"].tolist(), players, fixtures_data, next_gw, prior_stats=prior_stats
+        )
         squad_df = squad_df.merge(squad_ranked[["id", "expected_score"]], on="id", how="left")
     else:
         squad_df["expected_score"] = pd.NA
@@ -1806,7 +1801,14 @@ tab_team_builder, tab_season_overview, tab_player_base, tab_optimizer_draft = st
     ["Team Builder", "Season Overview", "PlayerBase", "Optimizer Draft"]
 )
 with tab_team_builder:
-    render_my_team_tab(bootstrap, players, fixtures, force_refresh)
+    try:
+        render_my_team_tab(bootstrap, players, fixtures, force_refresh)
+    except Exception:
+        st.error(
+            "Something went wrong building your Team Builder view — this is usually a "
+            "transient glitch (e.g. a momentary hiccup in FPL's own data feed). Try "
+            "clicking Refresh above, or reload the page."
+        )
 with tab_season_overview:
     render_fixtures_tab(bootstrap, fixtures, fx_error)
 with tab_player_base:
