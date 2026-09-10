@@ -1119,9 +1119,9 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
     st.markdown(f"#### Ideal XI for Next Gameweek (GW{next_gw})")
     st.caption(
         "Best starting XI from your actual 15-man squad for the upcoming gameweek — "
-        "form/PPG adjusted for that gameweek's specific fixture (a blank scores 0, a "
-        "double counts both fixtures). Not a transfer suggestion, just the best way to "
-        "line up what you already own."
+        "form, points-per-game, and last season's performance, adjusted for that "
+        "gameweek's specific fixture (a blank scores 0, a double counts both fixtures). "
+        "Not a transfer suggestion, just the best way to line up what you already own."
     )
     if fixtures_data is None:
         st.info("Fixtures unavailable this session — can't factor in fixture difficulty.")
@@ -1442,8 +1442,9 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
         "Personalized suggestions from your actual squad, current form, and fixtures — not "
         "just blank/double gameweek detection. The fixture outlook comes from a goals model "
         "fitted to this season's actual results once there's enough of it to fit (early on, "
-        "it falls back to a simpler estimate); form and points-per-game are still a simple "
-        "proxy, not a real forecast, and especially noisy this early in the season."
+        "it falls back to a simpler estimate); form, points-per-game, and last season's "
+        "performance are still a blended proxy, not a guaranteed forecast, and especially "
+        "noisy this early in the season."
     )
     available_chips = chips.available_chips(bootstrap, chips_used, next_gw)
     # FPL grants two of each chip (one per half-season) -- if a chip name shows up
@@ -1603,9 +1604,12 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
 
 
 SCORE_CAVEAT = (
-    "Scores are a simple proxy (recent form + points-per-game), not a real points "
-    "forecast — early in the season this is especially noisy since 'form' has few "
-    "games to draw on. Treat suggestions as a starting point, not gospel."
+    "Scores blend recent form, points-per-game, last season's performance, and each "
+    "fixture's outlook (a goals model fitted to this season's actual results, once "
+    "there's enough of it — falling back to a simpler estimate early on) — not a "
+    "guaranteed points forecast, and still noisiest early in the season when there's "
+    "little of any of this to draw on. Treat suggestions as a starting point, not "
+    "gospel."
 )
 
 
