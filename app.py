@@ -320,6 +320,21 @@ hr {{
     opacity: 0.9;
 }}
 
+/* When these four cards stack to one per row (mobile width), their
+   wrapping element-container locks in a height from an earlier layout
+   pass that doesn't account for the card's text needing more lines at
+   this width -- overflowing past its own wrapper and swallowing the row
+   gap to the next card (confirmed in-browser: neither the wrapper nor
+   any of its ancestors change size even when height is forced to auto
+   directly, so the wrapper's box genuinely can't be trusted here). A
+   margin directly on the card sidesteps that entirely, since it creates
+   space after the card regardless of what its wrapper thinks its own
+   height is. Harmless at desktop width too -- just a bit of space below
+   the row of four before the next heading. */
+.pl-chip-card {{
+    margin-bottom: 16px;
+}}
+
 [data-testid="stExpander"] {{
     background: {PL_SURFACE};
     border: 1px solid rgba(255, 255, 255, 0.1);
