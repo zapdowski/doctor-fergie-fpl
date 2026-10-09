@@ -311,7 +311,7 @@ def team_window_multipliers(fixtures, start_gw, num_gws, strengths, home_advanta
         defence_sums[h] += defensive_multiplier(strengths, league_avg_attack, h, exp_a)
         defence_sums[a] += defensive_multiplier(strengths, league_avg_attack, a, exp_h)
 
-    all_teams = set(attack_sums) | set(defence_sums)
+    all_teams = set(strengths) | set(attack_sums) | set(defence_sums)
     return {
         tid: {
             "attack": attack_sums.get(tid, 0.0) / num_gws,
