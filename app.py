@@ -1352,11 +1352,7 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                     f"""<div class="free-transfer-marker-label" style="position:absolute;left:var(--marker-x);top:18px;transform:{marker_transform};display:inline-block;padding:4px 9px;border-radius:999px;background:#FFD84D;color:#26002B;font-size:11px;font-weight:800;letter-spacing:.03em;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.25);text-align:center;">{marker_text}</div></div>""",
                     unsafe_allow_html=True,
                 )
-                st.caption(
-                    "The gold marker shows how many transfers you can make without a hit."
-                    if not chip_active
-                    else f"{chip_choice} makes every transfer free this gameweek."
-                )
+
 
                 if auto_maximize_transfers or maximize_budget_transfers or num_transfers_to_consider > 0:
                     with st.spinner("Scanning every player for the best transfers..."):
