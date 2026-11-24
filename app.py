@@ -460,21 +460,16 @@ hr {{
         height: 48px !important;
     }}
     .free-transfer-marker .free-transfer-marker-label {{
-        max-width: calc(100% - 24px) !important;
+        left: clamp(8px, calc(var(--marker-x) - 110px), calc(100% - 228px)) !important;
+        transform: none !important;
+        width: max-content;
+        max-width: min(220px, calc(100% - 16px)) !important;
+        box-sizing: border-box;
         padding: 4px 7px !important;
         font-size: 10px !important;
         line-height: 1.15 !important;
         white-space: normal !important;
         text-align: center;
-    }}
-    .free-transfer-marker.mobile-left .free-transfer-marker-label {{
-        transform: translateX(0) !important;
-    }}
-    .free-transfer-marker.mobile-center .free-transfer-marker-label {{
-        transform: translateX(-50%) !important;
-    }}
-    .free-transfer-marker.mobile-right .free-transfer-marker-label {{
-        transform: translateX(-100%) !important;
     }}
 }}
 
@@ -1344,24 +1339,17 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                     if free_marker_ratio > 0.82
                     else "translateX(-50%)"
                 )
-                marker_mobile_alignment = (
-                    "mobile-left"
-                    if free_marker_ratio < 0.44
-                    else "mobile-right"
-                    if free_marker_ratio > 0.56
-                    else "mobile-center"
-                )
                 marker_text = (
                     f"ALL TRANSFERS FREE · {chip_choice.upper()}"
                     if chip_active
                     else f"FREE TRANSFERS · {free_transfers} AVAILABLE"
                 )
                 st.markdown(
-                    f"""<div class="free-transfer-marker {marker_mobile_alignment}" style="position:relative;height:40px;margin-top:-29px;pointer-events:none;overflow:visible;z-index:2;">"""
-                    f"""<div style="position:absolute;left:calc(12px + {marker_pct:.3f}% - {marker_offset_px:.3f}px);top:-6px;transform:translateX(-50%);text-align:center;">"""
+                    f"""<div class="free-transfer-marker" style="--marker-x:calc(12px + {marker_pct:.3f}% - {marker_offset_px:.3f}px);position:relative;height:40px;margin-top:-29px;pointer-events:none;overflow:visible;z-index:2;">"""
+                    f"""<div style="position:absolute;left:var(--marker-x);top:-6px;transform:translateX(-50%);text-align:center;">"""
                     f"""<div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:8px solid #FFD84D;margin:0 auto;"></div>"""
                     f"""<div style="height:14px;width:3px;background:#FFD84D;border-radius:2px;box-shadow:0 0 8px rgba(255,216,77,.8);margin:0 auto;"></div></div>"""
-                    f"""<div class="free-transfer-marker-label" style="position:absolute;left:calc(12px + {marker_pct:.3f}% - {marker_offset_px:.3f}px);top:18px;transform:{marker_transform};display:inline-block;padding:4px 9px;border-radius:999px;background:#FFD84D;color:#26002B;font-size:11px;font-weight:800;letter-spacing:.03em;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.25);text-align:center;">{marker_text}</div></div>""",
+                    f"""<div class="free-transfer-marker-label" style="position:absolute;left:var(--marker-x);top:18px;transform:{marker_transform};display:inline-block;padding:4px 9px;border-radius:999px;background:#FFD84D;color:#26002B;font-size:11px;font-weight:800;letter-spacing:.03em;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.25);text-align:center;">{marker_text}</div></div>""",
                     unsafe_allow_html=True,
                 )
                 st.caption(
