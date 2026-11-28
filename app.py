@@ -460,8 +460,8 @@ hr {{
         height: 48px !important;
     }}
     .free-transfer-marker .free-transfer-marker-label {{
-        left: clamp(8px, calc(var(--marker-x) - 110px), calc(100% - 228px)) !important;
-        transform: none !important;
+        left: var(--marker-x) !important;
+        transform: var(--marker-transform) !important;
         width: max-content;
         max-width: min(220px, calc(100% - 16px)) !important;
         box-sizing: border-box;
@@ -1345,11 +1345,11 @@ def render_my_team_tab(bootstrap, players, fixtures_data, force_refresh):
                     else f"FREE TRANSFERS · {free_transfers} AVAILABLE"
                 )
                 st.markdown(
-                    f"""<div class="free-transfer-marker" style="--marker-x:calc(12px + {marker_pct:.3f}% - {marker_offset_px:.3f}px);position:relative;height:40px;margin-top:-29px;pointer-events:none;overflow:visible;z-index:2;">"""
+                    f"""<div class="free-transfer-marker" style="--marker-x:calc(12px + {marker_pct:.3f}% - {marker_offset_px:.3f}px);--marker-transform:{marker_transform};position:relative;height:40px;margin-top:-29px;pointer-events:none;overflow:visible;z-index:2;">"""
                     f"""<div style="position:absolute;left:var(--marker-x);top:-6px;transform:translateX(-50%);text-align:center;">"""
                     f"""<div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:8px solid #FFD84D;margin:0 auto;"></div>"""
                     f"""<div style="height:14px;width:3px;background:#FFD84D;border-radius:2px;box-shadow:0 0 8px rgba(255,216,77,.8);margin:0 auto;"></div></div>"""
-                    f"""<div class="free-transfer-marker-label" style="position:absolute;left:var(--marker-x);top:18px;transform:{marker_transform};display:inline-block;padding:4px 9px;border-radius:999px;background:#FFD84D;color:#26002B;font-size:11px;font-weight:800;letter-spacing:.03em;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.25);text-align:center;">{marker_text}</div></div>""",
+                    f"""<div class="free-transfer-marker-label" style="position:absolute;left:var(--marker-x);top:18px;transform:var(--marker-transform);display:inline-block;padding:4px 9px;border-radius:999px;background:#FFD84D;color:#26002B;font-size:11px;font-weight:800;letter-spacing:.03em;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.25);text-align:center;">{marker_text}</div></div>""",
                     unsafe_allow_html=True,
                 )
 
